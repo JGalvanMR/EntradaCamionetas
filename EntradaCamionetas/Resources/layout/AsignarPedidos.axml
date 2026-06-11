@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+  <TextView
+    android:text="Vehiculo:"
+    android:textAppearance="?android:attr/textAppearanceSmall"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" />
+  <Spinner
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:id="@+id/spinner5" />
+  <TextView
+      android:text="Pedidos:"
+      android:textAppearance="?android:attr/textAppearanceSmall"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content" />
+  <Spinner
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:id="@+id/spinner6" />
+  <TextView
+      android:text="Detalle Split Capturado"
+      android:textAppearance="?android:attr/textAppearanceLarge"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:gravity="center"
+      android:id="@+id/totalsolicitado" />
+  <GridView
+      android:minWidth="25px"
+      android:minHeight="25px"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:numColumns="1"
+      android:id="@+id/gvCtrl"
+      android:layout_weight="1"
+      android:columnWidth="150dp" />
+  <TextView
+    android:text="000"
+    android:textSize="15pt"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:id="@+id/totalcapturado" />
+  <Button
+      android:text="Asignar Pedido"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:id="@+id/Asignar"
+      android:layout_weight="0"
+      android:drawableLeft="@drawable/cerrar" />
+
+</LinearLayout>

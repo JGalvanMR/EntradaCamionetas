@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+  <TextView
+    android:text="Camioneta:"
+    android:textAppearance="?android:attr/textAppearanceSmall"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" />
+  <Spinner
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:id="@+id/spinner7" />
+  <TextView
+      android:text="Temperatura Final:"
+      android:textAppearance="?android:attr/textAppearanceSmall"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content" />
+  <EditText
+    android:inputType="number"
+    android:singleLine="true"
+    android:maxLines="1"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:id="@+id/TempFin"
+    android:imeOptions="actionDone" />
+  <TextView
+        android:text="Fecha: 00/00/0000 00:00:00 *.M"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/fechafin"
+        android:gravity="right" />
+  
+  <Button
+      android:text="Cerrar Camioneta"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:id="@+id/btnbclose"
+      android:layout_weight="0"
+      android:drawableLeft="@drawable/cerrar" />
+</LinearLayout>

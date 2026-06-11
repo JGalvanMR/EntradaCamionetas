@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Captura Camionetas</string>
+  <string name="tab1_text">Registro</string>
+  <string name="tab2_text">Asignar Pedido</string>
+  <string name="tab3_text">Cierre camioneta</string>
+</resources>
