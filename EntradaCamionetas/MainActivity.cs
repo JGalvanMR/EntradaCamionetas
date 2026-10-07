@@ -128,13 +128,27 @@ namespace EntradaCamionetas
 
             thisConnection = new SqlConnection(cadenaConexion);
 
-            //Registro de Ingreso Al Sistema.
-            thisConnection.Open();
+            //Registro de Ingreso Al Sistema (en segundo plano, con su propia conexion, para no bloquear la carga de la pantalla).
             string cadena = "INSERT INTO TB_REGISTRO_MOVIMIENTOS(FECHA,NOM_COMPU,NOM_USU,TIPO_MOV,OP_CLAVE,FOLIO,DETALLE,SISTEMA,MOV_FOLIO) " +
                         "VALUES('" + System.DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss") + "','CEL " + imei + "','CAPTURA CAMIONETA','E','" + ip + "','','Ingreso a sistema Captura Camioneta Imei: " + imei + ", Ip: " + ip + " ','CAPCAM','')";
-            SqlCommand cmd = new SqlCommand(cadena, thisConnection);
-            cmd.ExecuteNonQuery();
-            thisConnection.Close();
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    using (var conReg = new SqlConnection(cadenaConexion))
+                    {
+                        conReg.Open();
+                        using (var cmdReg = new SqlCommand(cadena, conReg))
+                        {
+                            cmdReg.ExecuteNonQuery();
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // El registro de bitacora no debe impedir el uso de la aplicacion.
+                }
+            });
 
 
             fechaini = FindViewById<TextView>(Resource.Id.fechacaptura);
@@ -157,34 +171,36 @@ namespace EntradaCamionetas
             fechaini.Text = System.DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss ") + ampm;
 
             //Llenado de spinner vehiculos ***********************************************************************************************************
+            // Una sola conexion abierta para todas las cargas iniciales de catalogos.
             thisConnection.Open();
-            query = "select * FROM tb_cat_vehiculos Where estatus = 'A' AND clave NOT IN (SELECT no_trailer FROM tb_mstr_trailer WHERE horafin = '--:--' AND no_trailer = clave AND transporte = 'PC' AND tempfin = '' AND Guardar = 'N')  ORDER BY clave";
+            query = "select clave FROM tb_cat_vehiculos Where estatus = 'A' AND clave NOT IN (SELECT no_trailer FROM tb_mstr_trailer WHERE horafin = '--:--' AND no_trailer = clave AND transporte = 'PC' AND tempfin = '' AND Guardar = 'N')  ORDER BY clave";
             da = new SqlDataAdapter(query, thisConnection);
             da.Fill(ds, "vehiculos");
             vehiculos = ds.Tables["vehiculos"];
-
-            int dif = 0;
-
 
             List<string> list = new List<string>();
 
             list.Add("Seleccione un Vehiculo");
 
+            var claves = new List<string>(vehiculos.Rows.Count);
             foreach (DataRow row in vehiculos.Rows)
             {
-                if (ValidaCamioneta(row["clave"].ToString()) > 0)
+                claves.Add(row["clave"].ToString());
+            }
+
+            // Pedidos pendientes de todas las camionetas en pocos viajes al servidor (antes: 2 consultas por camioneta).
+            int[] pendientes = ContarPendientes(claves);
+            for (int i = 0; i < claves.Count; i++)
+            {
+                if (pendientes[i] > 0)
                 {
-                    list.Add(row["clave"].ToString());
+                    list.Add(claves[i]);
                 }
             }
 
             strFrutas = list.ToArray();
 
             System.Collections.ArrayList listaFrutas2 = new System.Collections.ArrayList();
-
-
-
-            thisConnection.Close();
 
 
             Collections.AddAll(listaFrutas2, strFrutas);
@@ -251,12 +267,10 @@ namespace EntradaCamionetas
 
 
             //Llenado de spinner Chofer ***********************************************************************************************************
-            thisConnection.Open();
-            query = "select * FROM tb_cat_vehiculos Where estatus = 'A'";
+            query = "select chofer FROM tb_cat_vehiculos Where estatus = 'A'";
             da = new SqlDataAdapter(query, thisConnection);
             da.Fill(ds, "choferes");
             choferes = ds.Tables["choferes"];
-            thisConnection.Close();
 
 
 
@@ -276,7 +290,6 @@ namespace EntradaCamionetas
 
 
             //Llenado de spinner Responsable ***********************************************************************************************************
-            thisConnection.Open();
             query = "SELECT NOMBRE FROM  TB_RESPONSABLE Where ESTATUS = 'A' And TIPO_EMB = 'C' ORDER BY NOMBRE";
             da = new SqlDataAdapter(query, thisConnection);
             da.Fill(ds, "responsables");
@@ -361,8 +374,12 @@ namespace EntradaCamionetas
 
 
 
+            // El texto de seleccion inicial no es una camioneta: la consulta nunca regresa filas.
+            if (vehiculo == "Seleccione un Vehiculo")
+                return;
+
             thisConnection.Open();
-            string Cadenar = "SELECT * FROM tb_mstr_trailer WHERE horafin = '--:--' AND no_trailer = '" + vehiculo.Trim() + "' AND transporte = 'PC' AND tempfin = '' AND Guardar = 'N'";
+            string Cadenar = "SELECT TOP (1) horaini FROM tb_mstr_trailer WHERE horafin = '--:--' AND no_trailer = '" + vehiculo.Trim() + "' AND transporte = 'PC' AND tempfin = '' AND Guardar = 'N'";
             SqlDataAdapter da = new SqlDataAdapter(Cadenar, thisConnection);
             DataSet ds = new DataSet();
             da.Fill(ds, "Ped");
@@ -504,25 +521,53 @@ namespace EntradaCamionetas
             }
         }
 
-        private int ValidaCamioneta(string camioneta)
+        // Mismas consultas que antes por camioneta (pedidos con factura pendiente + pedidos split sin factura),
+        // pero enviadas en lotes: un viaje al servidor por cada 100 camionetas en lugar de 2 por camioneta.
+        // Requiere la conexion abierta.
+        private int[] ContarPendientes(List<string> claves)
         {
-            // string Cadena = "SELECT Count(fcn_folio) AS cantPed FROM  tb_mstr_facturas_nal A INNER JOIN tb_mstr_pedidos_nal B ON A.pdn_folio = B.pdn_folio Where B.pdn_surtido != 'S' AND B.pdn_estatus != 'C' AND A.prov_clave = 'MRLUCKY'  AND A.cve_auto = '"+ camioneta +"' AND fcn_fecha > '13/02/2019'";
+            const string sqlFacturas = "SELECT Count(fcn_folio) AS cantPed  FROM  tb_mstr_facturas_nal A Where A.prov_clave = 'MRLUCKY'  AND A.cve_auto = @c{0} AND fcn_fecha > '13/02/2019' AND pdn_folio IN (SELECT pdn_folio FROM tb_mstr_pedidos_nal Where  pdn_surtido != 'S' AND pdn_estatus != 'C');";
+            const string sqlSplit = "SELECT Count(emb_folio) AS pdn_folio FROM tb_det_split WHERE(estatus = 'A') AND (emb_folio IN (SELECT DISTINCT emb_folio FROM Tb_Det_Etiqueta WHERE(Cve_Camioneta = @c{0}))) AND(emb_folio NOT IN(SELECT A.pdn_folio FROM  tb_mstr_facturas_nal A Where A.prov_clave = 'MRLUCKY'  AND A.cve_auto = @c{0} AND fcn_fecha > '13/02/2019' AND pdn_folio IN (SELECT pdn_folio FROM tb_mstr_pedidos_nal Where  pdn_surtido != 'S' AND pdn_estatus != 'C')));";
+            const int tamanoLote = 100;
 
-            string Cadena = "SELECT Count(fcn_folio) AS cantPed  FROM  tb_mstr_facturas_nal A Where A.prov_clave = 'MRLUCKY'  AND A.cve_auto = '" + camioneta.Trim() + "' AND fcn_fecha > '13/02/2019' AND pdn_folio IN (SELECT pdn_folio FROM tb_mstr_pedidos_nal Where  pdn_surtido != 'S' AND pdn_estatus != 'C')";
+            int[] totales = new int[claves.Count];
 
-            SqlCommand cmd = new SqlCommand(Cadena, thisConnection);
-            int Valor = Convert.ToInt32(cmd.ExecuteScalar());
+            for (int inicio = 0; inicio < claves.Count; inicio += tamanoLote)
+            {
+                int fin = Math.Min(inicio + tamanoLote, claves.Count);
+                var sb = new System.Text.StringBuilder();
 
+                using (var cmd = new SqlCommand())
+                {
+                    cmd.Connection = thisConnection;
+                    for (int k = inicio; k < fin; k++)
+                    {
+                        int n = k - inicio;
+                        // VarChar igual que el literal original, para conservar la comparacion y el uso de indices.
+                        cmd.Parameters.Add("@c" + n, SqlDbType.VarChar, 100).Value = claves[k].Trim();
+                        sb.AppendFormat(sqlFacturas, n);
+                        sb.AppendFormat(sqlSplit, n);
+                    }
+                    cmd.CommandText = sb.ToString();
 
-            // string cadenaoption = "SELECT Count(emb_folio) AS pdn_folio FROM tb_det_split WHERE(estatus = 'A') AND(emb_folio IN (SELECT DISTINCT emb_folio FROM Tb_Det_Etiqueta WHERE(Cve_Camioneta = '" + camioneta.Trim() + "'))) AND(emb_folio NOT IN" +
-            // "(SELECT A.pdn_folio FROM tb_mstr_facturas_nal AS A INNER JOIN tb_mstr_pedidos_nal AS B ON A.pdn_folio = B.pdn_folio WHERE(B.pdn_surtido <> 'S') AND(B.pdn_estatus <> 'C') AND(A.prov_clave = 'MRLUCKY') AND(A.cve_auto = '" + vehiculo.Trim() + "') AND(A.fcn_fecha > '13/02/2019')))";
+                    using (SqlDataReader rd = cmd.ExecuteReader())
+                    {
+                        for (int k = inicio; k < fin; k++)
+                        {
+                            // Dos resultados por camioneta, en el mismo orden en que se armo el lote.
+                            rd.Read();
+                            int valor = Convert.ToInt32(rd.GetValue(0));
+                            rd.NextResult();
+                            rd.Read();
+                            valor += Convert.ToInt32(rd.GetValue(0));
+                            rd.NextResult();
+                            totales[k] = valor;
+                        }
+                    }
+                }
+            }
 
-            string cadenaoption = "SELECT Count(emb_folio) AS pdn_folio FROM tb_det_split WHERE(estatus = 'A') AND (emb_folio IN (SELECT DISTINCT emb_folio FROM Tb_Det_Etiqueta WHERE(Cve_Camioneta = '" + camioneta.Trim() + "'))) AND(emb_folio NOT IN(SELECT A.pdn_folio FROM  tb_mstr_facturas_nal A Where A.prov_clave = 'MRLUCKY'  AND A.cve_auto = '" + camioneta.Trim() + "' AND fcn_fecha > '13/02/2019' AND pdn_folio IN (SELECT pdn_folio FROM tb_mstr_pedidos_nal Where  pdn_surtido != 'S' AND pdn_estatus != 'C')))";
-
-            cmd = new SqlCommand(cadenaoption, thisConnection);
-            Valor = Valor + Convert.ToInt32(cmd.ExecuteScalar());
-
-            return Valor;
+            return totales;
         }
 
 

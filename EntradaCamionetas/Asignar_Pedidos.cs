@@ -101,6 +101,11 @@ namespace EntradaCamionetas
             Guardar.Click += BtnGuardar_Click;
             Guardar.Enabled = false;
 
+            // Los eventos se suscriben una sola vez; antes se volvian a suscribir cada vez que se reconstruia el adaptador,
+            // por lo que cada seleccion ejecutaba las consultas varias veces.
+            Vehiculos.ItemSelected += spinner_Item_Vehiculos;
+            Pedidos.ItemSelected += spinner_Item_Pedidos;
+            FindViewById<GridView>(Resource.Id.gvCtrl).ItemClick += OnGridView_ItemClicked; //detalle_pedido
 
         }
 
@@ -169,7 +174,7 @@ namespace EntradaCamionetas
                 da.Fill(ds, "ConsPed");
                 DataTable ConsPed = ds.Tables["ConsPed"];
 
-                thisConnection.Close();
+                // La conexion permanece abierta durante todo el guardado (antes se abria y cerraba por cada consulta).
                 foreach (DataRow Row in ConsPed.Rows)
                 {
 
@@ -211,8 +216,6 @@ namespace EntradaCamionetas
 
                     string cadenasx = "";
 
-                    thisConnection.Open();
-
                     if (tipo_rec == "PTC")
                         cadenasx = "SELECT ETIQUETA AS PROD,SURTIDO,FECHA_CAD AS FECCAD, (CASE fecha_cad WHEN '' THEN  FORMAT( DATEADD(day, 15, pti_fecha), 'dd/MM/yyyy', 'en-US' ) WHEN fecha_cad THEN fecha_cad END) AS fecha_cad FROM TB_DET_TRAZABILIDAD WHERE PROD_CLAVE = '" + prod_clave + "' AND RECIBO = '" + recibo + "' " +
                                  "AND TIPO = '" + tipo_rec + "' AND TARIMA = '" + Convert.ToInt32(tarima).ToString() + "' ";
@@ -223,8 +226,7 @@ namespace EntradaCamionetas
 
                     SqlDataAdapter dax = new SqlDataAdapter(cadenasx, thisConnection);
                     DataSet dsx = new DataSet();
-                    thisConnection.Close();
-                    //MessageBox.Show(cadena); 
+                    //MessageBox.Show(cadena);
                     dax.Fill(dsx, "Info");
                     DataTable Info = dsx.Tables["Info"];
                     //MessageBox.Show(Info.Rows.Count.ToString()); 
@@ -233,21 +235,13 @@ namespace EntradaCamionetas
                         fec_cad = row["feccad"].ToString().Trim();
                     }
 
-                    thisConnection.Open();
-
                     string cadenainsert = "IF NOT EXISTS(SELECT emb_folio FROM tb_det_embarque WHERE emb_folio = '" + emb_folio.Trim() + "' AND no_lote = '" + no_lote + "' AND  prod_clave = '" + prod_clave + "' AND cajas = '" + cajas + "' AND tarima = '" + tarima + "' AND tipo_rec = '" + tipo_rec + "' AND recibo = '" + recibo + "' AND FechaCap = '" + FechaCap + "' AND OpCap = '" + opCap + "') INSERT INTO tb_det_embarque(emb_folio, no_lote, prod_clave, cajas, emb_tipo, temp, seccion, tarima, fec_cad, tipo_rec, recibo, fechacad, id_tarima, Estatus, FechaCap, OpCap, Tarima_F, datecaptura) " +
                                 "VALUES('" + emb_folio + "','" + no_lote + "','" + prod_clave + "','" + cajas + "','" + emb_tipo + "','" + temp + "','" + seccion + "','" + tarima + "','" + fec_cad + "','" + tipo_rec + "','" + recibo + "','','" + id_tarima + "','" +
                                 Estatus + "','" + FechaCap + "','" + opCap + "','" + Tarima_F + "', GETDATE())";
                     //MessageBox.Show(cadena);
                     SqlCommand cmd = new SqlCommand(cadenainsert, thisConnection);
                     cmd.ExecuteNonQuery();
-
-                    thisConnection.Close();
-
-
                 }
-
-                thisConnection.Open();
 
                 //Actualizacion de Mstr_Embarque Cajas. Observaciones, Estatus, hora_Fin
 
@@ -373,7 +367,6 @@ namespace EntradaCamionetas
 
                     comboAdapterped = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerItem, strPedidos);
                     Pedidos.Adapter = comboAdapterped;
-                    Pedidos.ItemSelected += new EventHandler<AdapterView.ItemSelectedEventArgs>(spinner_Item_Pedidos);
                 });
 
                 RunOnUiThread(() => alertDialog.Show());
@@ -399,7 +392,7 @@ namespace EntradaCamionetas
                 TotalLeido = Convert.ToDateTime(cmdx.ExecuteScalar()).ToString();
             }
             else {
-                TotalLeido = cmd.ExecuteScalar().ToString();
+                TotalLeido = objValue.ToString();
             }
 
                 return TotalLeido;
@@ -427,9 +420,6 @@ namespace EntradaCamionetas
             da.Fill(ds, "pedidos");
             pedidos = ds.Tables["pedidos"];
 
-            thisConnection.Close();
-
-            thisConnection.Open();
             //string cadenaoption = "SELECT DISTINCT(emb_folio) AS pdn_folio FROM tb_det_split WHERE(estatus = 'A') AND(emb_folio IN (SELECT DISTINCT emb_folio FROM Tb_Det_Etiqueta WHERE(Cve_Camioneta = '" + vehiculo.Trim() + "'))) AND(emb_folio NOT IN" +
             //"(SELECT A.pdn_folio FROM tb_mstr_facturas_nal AS A INNER JOIN tb_mstr_pedidos_nal AS B ON A.pdn_folio = B.pdn_folio WHERE(B.pdn_surtido <> 'S') AND(B.pdn_estatus <> 'C') AND(A.prov_clave = 'MRLUCKY') AND(A.cve_auto = '" + vehiculo.Trim() + "') AND(A.fcn_fecha > '13/02/2019')))";
 
@@ -465,7 +455,6 @@ namespace EntradaCamionetas
 
             comboAdapterped = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerItem, strPedidos);
             Pedidos.Adapter = comboAdapterped;
-            Pedidos.ItemSelected += new EventHandler<AdapterView.ItemSelectedEventArgs>(spinner_Item_Pedidos);
         }
 
         private void spinner_Item_Pedidos(object sender, AdapterView.ItemSelectedEventArgs e)
@@ -477,7 +466,6 @@ namespace EntradaCamionetas
             List<FlimStarInfo> lstFlimStar = ConsSplit(pedido);
             var gvObject = FindViewById<GridView>(Resource.Id.gvCtrl);
             gvObject.Adapter = new myGVItemAdapter(this, lstFlimStar);
-            gvObject.ItemClick += new EventHandler<AdapterView.ItemClickEventArgs>(OnGridView_ItemClicked); //detalle_pedido
             return;
         }
 
@@ -517,7 +505,6 @@ namespace EntradaCamionetas
             
             comboAdapter = new ArrayAdapter<string>(this, Android.Resource.Layout.SimpleSpinnerItem, strFrutas);
             Vehiculos.Adapter = comboAdapter;
-            Vehiculos.ItemSelected += new EventHandler<AdapterView.ItemSelectedEventArgs>(spinner_Item_Vehiculos);
 
         }
 
@@ -618,6 +605,17 @@ namespace EntradaCamionetas
             da.Fill(ds, "ConsPed");
             var ConsPed = ds.Tables["ConsPed"];
 
+            // Cajas surtidas por producto en una sola consulta (antes: una consulta por producto).
+            var surtidoPorProducto = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            using (var cmdSur = new SqlCommand("Select prod_clave, sum(cajas) as cajas from tb_det_split Where emb_folio = '" + pedido.Trim() + "' AND estatus != 'C' Group By prod_clave", thisConnection))
+            using (SqlDataReader rdSur = cmdSur.ExecuteReader())
+            {
+                while (rdSur.Read())
+                {
+                    surtidoPorProducto[rdSur["prod_clave"].ToString().Trim()] = Convert.ToInt32(rdSur["cajas"]);
+                }
+            }
+
             foreach (DataRow Row in ConsPed.Rows)
             {
                 string claveproducto = Row["prod_clave"].ToString().Trim();
@@ -629,10 +627,8 @@ namespace EntradaCamionetas
                 string adicional = "";
                 string borrar = "N";
 
-                string Cadena = "Select sum(cajas) as cajas from tb_det_split Where emb_folio = '" + pedido.Trim() + "' AND prod_clave = '" + claveproducto.Trim() + "'" +
-                     " AND estatus != 'C' Group By prod_clave Order by prod_clave";
-                SqlCommand cmd = new SqlCommand(Cadena, thisConnection);
-                int cant_sur = Convert.ToInt32(cmd.ExecuteScalar());
+                int cant_sur;
+                surtidoPorProducto.TryGetValue(claveproducto, out cant_sur);
 
                 string cadenaEmb = "insert into  tb_ped_embarque(emb_folio, prod_clave, emb_tipo, cant_ped, cant_sur, nom_prod, nalexp, adicional, Borrar) " +
                                "Values('" + embfolio.Trim() + "','" + claveproducto.Trim() + "','" + embtipo.Trim() + "','" + cant_ped.Trim() + "','" + cant_sur + "','" + nom_prod.Trim() + "','" + nalexp.Trim() + "', '" + adicional.Trim() + "','" + borrar.Trim() + "')";
