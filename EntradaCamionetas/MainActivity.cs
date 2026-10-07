@@ -17,8 +17,8 @@ namespace EntradaCamionetas
     public class MainActivity : Activity
     {
 
-        //public static string cadenaConexion = "Persist Security Info=False;user id=sa; password=Gabira2026$;Initial Catalog =GAB_Irapuato; server=tcp:189.206.160.206,2352; Connect Timeout = 130";
-        public static string cadenaConexion = "Persist Security Info=False;user id=sa; password=Gabira2026$;Initial Catalog =GAB_Irapuato; server=tcp:192.168.123.6,1433; Connect Timeout = 130";
+        public static string cadenaConexion = "Persist Security Info=False;user id=sa; password=Gabira2026$;Initial Catalog =GAB_Irapuato; server=tcp:189.206.160.206,2352; Connect Timeout = 130";
+        //public static string cadenaConexion = "Persist Security Info=False;user id=sa; password=Gabira2026$;Initial Catalog =GAB_Irapuato; server=tcp:192.168.123.6,1433; Connect Timeout = 130";
         public static string veh = "";
         public static int captura = 0;
         SqlCommand cmnd = new SqlCommand();
@@ -123,9 +123,7 @@ namespace EntradaCamionetas
             WifiManager wifiManager = (WifiManager)this.GetSystemService(Service.WifiService);
             ip = GetIPAddress();
             //obtener Imei del telefono
-            Android.Telephony.TelephonyManager mTelephonyMgr;
-            mTelephonyMgr = (Android.Telephony.TelephonyManager)GetSystemService(TelephonyService);
-            imei = mTelephonyMgr.DeviceId;
+            imei = Android.Provider.Settings.Secure.GetString(ContentResolver, Android.Provider.Settings.Secure.AndroidId);
             //Termina obtener datos
 
             thisConnection = new SqlConnection(cadenaConexion);
